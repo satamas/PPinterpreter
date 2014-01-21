@@ -11,50 +11,27 @@
 #include <fstream>
 #include <string>
 #include <stack>
+#include <string>
+#include <vector>
+#include "Token.h"
 
-struct Token{
-public:
-
-	enum Type{
-		NAME,
-		NUM,
-		COMMAND,
-		COMPARISION_OP,
-		ALGEBRAIC_OP,
-		UNCATHEGORIZED_ONE_CHAR_TOKEN
-	};
-
-	Token(){
-	}
-
-	Token(std::string token, Type type){
-		_token = token;
-		_type = type;
-	}
-
-	std::string getToken(){
-		return _token;
-	}
-
-	Type getType(){
-		return _type;
-	}
-
-private:
-	Type _type;
-	std::string _token;
-};
-
+using std::string;
+using std::vector;
 
 class Tokenizer {
 public:
 	Tokenizer(std::ifstream & inf);
 	bool eof();
-	void operator << (Token const token);
 	void operator >> (Token & token);
+	void assertNextToken(Token::Type const typeToCompare);
+	void assertNextToken(std::string const strToCompare);
+	Token getNextTokenVal();
+	void skipToken();
 	virtual ~Tokenizer();
 private:
-	std::stack<Token> returnedTokens;
+	Token _nextToken;
+	int _lineNo;
+	bool contents(vector<char> const & arrOfChars, char const charWeAreLookingFor) const;
 	Token readTokenFromFile();
 	std::ifstream & _inf;
 };

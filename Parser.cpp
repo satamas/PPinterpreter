@@ -6,306 +6,258 @@
  */
 
 #include "Parser.h"
+#include <iostream>
+using std::pair;
+using std::stoi;
 
-Parser::Parser(std::ifstream & inf, std::map<std::string, Function> * funcNameSpace):
-_tokenizer(inf),
-_mainScope(){
-	parseScope(true, _mainScope, funcNameSpace);
+Parser::Parser(ifstream & inf):
+_tokenizer(inf){
 }
 
-void Parser::parseFuncDefinition(std::map<std::string, Function> * funcNamespace){
-	std::string funcName;
-	std::vector<std::string> funcParameters;
-	Token token;
-	_tokenizer >> token;
-	if(token.getType() == Token::NAME){
-		funcName = token.getToken();
-		_tokenizer >> token;
-		if(token.getToken() == "("){
-			_tokenizer >> token;
-			if(token.getToken() != ")"){
-				while(true){
-					if(token.getType() == Token::NAME){
-						funcParameters.push_back(token.getToken());
-						_tokenizer >> token;
-						if(token.getToken() == ")"){
-							break;
-						}
-						if(token.getToken() != ","){
-							std::cout << "Syntax error";
-							std::exit(0);
-						}
-						_tokenizer >> token;
-					}else{
-						std::cout << "Syntax error";
-						std::exit(0);
-					}
-				}
-			}
-			_tokenizer >> token;
-			if(token.getToken() != ":"){
-				std::cout << "Syntax error";
-				std::exit(0);
-			}
-		}else{
-			std::cout << "Syntax error";
-			std::exit(0);
-		}
-	}else{
-		std::cout << "Syntax error";
-		std::exit(0);
-	}
-	std::vector<command*> body;
-	parseScope(false, body);
-	if(funcNamespace->count(funcName)){
-		std::cout << "Multiple function definition" << std::endl;
-	}else{
-		funcNamespace->insert( std::pair<std::string, Function>( funcName,Function(funcParameters, body, funcNamespace) ) );
-	}
-
-}
-
-void Parser::parseScope(bool isMainScope, std::vector<command *> & scopeBody, std::map<std::string, Function> * funcNameSpace){
+void Parser::parseScope(bool const isMainScope, vector<ASTNode const *> & scopeBody, map<string, Function const *> & funcNamespace){
 	while(!_tokenizer.eof()){
 		Token token;
 		_tokenizer >> token;
 		switch (token.getType()){
 
 		case Token::NAME:{
-			std::string var = token.getToken();
-			_tokenizer >> token;
-			if(token.getToken() == "="){
-				VarDef * varDef = new VarDef(var, parseFormula('\n'));
-				scopeBody.push_back(varDef);
+			string name = token;
+			Token token = _tokenizer.getNextTokenVal();
+			if(token == "="){
+				_tokenizer.skipToken();
+				scopeBody.push_back( parseVarDef(name) );
 			} else{
-				std::cout << "Syntax error";
-				std::exit(0);
+				scopeBody.push_back( parseFuncCall(name) );
 			}
 			break;
 		}
 
-		case Token::COMMAND:{
-			if(token.getToken() == "print"){
-				commandPrint * print = new commandPrint(parseFormula('\n'));
-				scopeBody.push_back(print);
+		case Token::PRINT:{
+			Token eofToken;
+			scopeBody.push_back(new ASTPrint(parseFormula(eofToken), eofToken.getLineNo()));
+			eofToken.assertTokenType("\n");
+			break;
+		}
+
+		case Token::READ:{
+			_tokenizer >> token;
+			token.assertTokenType(Token::NAME);
+			scopeBody.push_back(new ASTRead( token, token.getLineNo() ));
+			break;
+		}
+
+		case Token::IF:{
+			scopeBody.push_back(parseIf(funcNamespace));
+			break;
+		}
+
+		case Token::WHILE:{
+			scopeBody.push_back(parseWhile(funcNamespace));
+			break;
+		}
+
+		case Token::END:{
+			if(isMainScope){
+				cerr << "line " << token.getLineNo() <<  ": syntax error" << endl;
+				exit(0);
+			} else{
+				return;
 			}
+			break;
+		}
 
-			if(token.getToken() == "read"){
-				Token token;
-				_tokenizer >> token;
-				commandRead * read;
-
-				if(token.getType() == Token::NAME){
-					read = new commandRead(token.getToken());
-				} else{
-					std::cout << "Syntax error";
-					std::exit(0);
-				}
-
-				_tokenizer >> token;
-				if(token.getToken() != "\n"){
-					std::cout << "Syntax error";
-					std::exit(0);
-				}
-
-				scopeBody.push_back(read);
-
+		case Token::DEF:{
+			if(isMainScope){
+				parseFuncDef(funcNamespace);
+			} else{
+				cerr << "line " << token.getLineNo() <<  ": syntax error" << endl;
+				exit(0);
 			}
+			break;
+		}
 
-			if(token.getToken() == "if"){
-				parseLogicScope(scopeBody, false);
-			}
-
-			if(token.getToken() == "while"){
-				parseLogicScope(scopeBody, true);
-			}
-
-			if(token.getToken() == "end"){
-				if(isMainScope){
-					std::cout << "Syntax error";
-					std::exit(0);
-				} else{
-					return;
-				}
-			}
-
-			if(token.getToken() == "def"){
-				if(isMainScope){
-					parseFuncDefinition(funcNameSpace);
-				} else{
-					std::cout << "Syntax error";
-					std::exit(0);
-				}
-
-
-			}
-
-			if(token.getToken() == "return"){
-				scopeBody.push_back(new commandReturn(parseFormula('\n')));
-			}
-
-	//			if(token.getToken() == "read"){
-	//				Token token;
-	//				_tokenizer >> token;
-	//				if(token.getType() == Token::NAME){
-	//					Read print(parseFormula);
-	//				}
-	//			}
+		case Token::RETURN:{
+			Token eofToken;
+			scopeBody.push_back(new ASTReturn(parseFormula(eofToken), eofToken.getLineNo()));
+			eofToken.assertTokenType("\n");
 			break;
 		}
 
 		case Token::UNCATHEGORIZED_ONE_CHAR_TOKEN:{
-			if (!(token.getToken() == "\n")){
-				std::cout << "Syntax error";
-				std::exit(0);
-			}
+			token.assertTokenType("\n");
 			break;
 		}
 
 		default:
-			std::cout << "Syntax error";
-			std::exit(0);
-		break;
+			cerr << "line " << token.getLineNo() <<  ": syntax error" << endl;
+			exit(0);
+			break;
 		}
 	}
 
-	if(!isMainScope){
-		std::cout << "Syntax error";
-		std::exit(0);
-	}
-
 }
 
-void Parser::parseLogicScope(std::vector<command *> & scopeBody, bool isWhile){
-	int ifPos = scopeBody.size();
-	Token::Type type = Token::COMPARISION_OP;
-	ASTNode * leftPart = parseFormula(0,&type);
-	Token token;
-	_tokenizer >> token;
-	if(token.getType() == Token::COMPARISION_OP){
-		std::string comparator = token.getToken();
-	} else{
-		std::cout << "Syntax error";
-		std::exit(0);
-	}
-	ASTNode * rightPart = parseFormula(':');
-	parseScope(false, scopeBody);
-	if(isWhile){
-		scopeBody.push_back(new commandGoTo(ifPos-1));
-		command * c = new commandIf(leftPart, token.getToken(), rightPart, scopeBody.size());
-		scopeBody.insert(scopeBody.begin() + ifPos + 1, c);
-	} else{
-		command * c = new commandIf(leftPart, token.getToken(), rightPart, scopeBody.size());
-		scopeBody.insert(scopeBody.begin() + ifPos, c);
-	}
-
+ASTNode * Parser::parseVarDef(string const varName){
+	Token eofToken;
+	ASTNode * varDef = new ASTVarDef(varName, parseFormula(eofToken), eofToken.getLineNo());
+	eofToken.assertTokenType("\n");
+	return varDef;
 }
 
-//VarDef * Parser::parseVarDef(){
-//	Token token;
-//	_tokenizer >> token;
-//	if(token.getType() == Token::NAME){
-//		std::string var = token.getToken();
-//		_tokenizer >> token;
-//		if(token.getToken() == "="){
-//			VarDef * varDef = new VarDef(var, parseFormula('\n'));
-//			return varDef;
-//		} else{
-//			std::cout << "Syntax error";
-//			std::exit(0);
-//		}
-//	} else{
-//		std::cout << "Syntax error";
-//		std::exit(0);
-//	}
-//}
+ASTNode * Parser::parseIf(map<string, Function const *> &  funcNamespace){
+	vector<ASTNode const *> ifBody;
+	int lineNo;
+	ASTNode * condition = parseCondition(lineNo);
+	parseScope(false, ifBody, funcNamespace);
+	return new ASTIf(condition, ifBody, lineNo);
+}
 
-ASTNode * Parser::parseSummand(char eofSymbol, Token::Type * eofTokenType){
+ASTNode * Parser::parseWhile(map<string, Function const *> & funcNamespace){
+	vector<ASTNode const *> whileBody;
+	int lineNo;
+	ASTNode * condition = parseCondition(lineNo);
+	parseScope(false, whileBody, funcNamespace);
+	return new ASTWhile(condition, whileBody, lineNo);
+}
+
+void Parser::parseFuncDef(map<string, Function const *> & funcNamespace){
+	string funcName;
+	vector<string> funcParameters;
 	Token token;
 	_tokenizer >> token;
-
-	ASTNode * num = 0;
-	if(token.getType() == Token::NUM){
-		num = new ASTNum(std::stoi(token.getToken(),0,10));
-	}
-	else if(token.getType() == Token::NAME){
-		Token nextToken;
-		_tokenizer >> nextToken;
-		if(nextToken.getToken() != "("){
-			_tokenizer << nextToken;
-			num = new ASTVar(token.getToken());
-		} else{
-			std::vector<ASTNode *> parameters;
-			_tokenizer >> nextToken;
-			while(nextToken.getToken() != ")"){
-				_tokenizer << nextToken;
-				parameters.push_back(parseFormula(','));
-				_tokenizer >> nextToken;
+	token.assertTokenType(Token::NAME);
+	funcName = token;
+	_tokenizer.assertNextToken("(");
+	_tokenizer >> token;
+	if( token != ")" ){
+		while(true){
+			token.assertTokenType(Token::NAME);
+			funcParameters.push_back(token);
+			_tokenizer >> token;
+			if( token == ")" ){
+				break;
 			}
-			num = new ASTFunc(token.getToken(), parameters);
+			token.assertTokenType(",");
+			_tokenizer >> token;
 		}
 	}
-	else if(token.getToken() == "("){
-		num = parseFormula(')');
-	}
-	else{
-			std::cout << "Syntax error";
-			std::exit(0);
-	}
+	_tokenizer.assertNextToken(":");
 
-	_tokenizer >> token;
-	if(eofTokenType != 0){
-		if(token.getType() == *eofTokenType || token.getToken() == "+" || token.getToken() == "-"){
-			_tokenizer << token;
-			return num;
+
+	vector<ASTNode const *> body;
+	parseScope( false, body, funcNamespace);
+	Function * function = new Function(funcParameters, body);
+	if( funcNamespace.count(funcName) ){
+		cerr << "Multiple function definition " << funcName << endl;
+	}
+	funcNamespace.insert( pair<string, Function const *>( funcName, function ) );
+
+}
+
+ASTNode * Parser::parseFuncCall(string name){
+	Token token;
+	Token eofToken;
+	vector<ASTNode *> parameters;
+	_tokenizer.assertNextToken("(");
+	token = _tokenizer.getNextTokenVal();
+	if (token != ")"){
+		while(true){
+			parameters.push_back(parseFormula(eofToken));
+			if(eofToken == ")"){
+				break;
+			} else{
+				eofToken.assertTokenType(",");
+			}
 		}
 	} else{
-		if(token.getToken() == std::string(1,eofSymbol) || token.getToken() == "+" || token.getToken() == "-"){
-			_tokenizer << token;
-			return num;
-		}
+		_tokenizer.skipToken();
 	}
-	if(token.getToken() == "*"){
-		ASTMult * mult = new ASTMult(num, parseSummand(eofSymbol, eofTokenType));
-		return mult;
+	return  new ASTFunc(name, parameters, token.getLineNo());
+}
+
+
+ASTNode * Parser::parseCondition(int & lineNo){
+	Token eofToken;
+	ASTNode * leftPart = parseFormula(eofToken);
+	eofToken.assertTokenType(Token::COMPARISION_OP);
+	Token comparator = eofToken;
+	ASTNode * rightPart = parseFormula(eofToken);
+	eofToken.assertTokenType(":");
+
+	ASTNode * condition;
+	if(comparator == "=="){
+		condition = new ASTeq(leftPart, rightPart, comparator.getLineNo());
+	} else if(comparator == ">="){
+		condition = new ASTgeq(leftPart, rightPart, comparator.getLineNo());
+	} else if(comparator == "<="){
+		condition = new ASTleq(leftPart, rightPart, comparator.getLineNo());
+	} else if(comparator == "!="){
+		condition = new ASTneq(leftPart, rightPart, comparator.getLineNo());
+	} else if(comparator == ">"){
+		condition = new ASTgt(leftPart, rightPart, comparator.getLineNo());
+	} else if(comparator == "<"){
+		condition = new ASTlt(leftPart, rightPart, comparator.getLineNo());
 	}
-	else if(token.getToken() == "/"){
-		ASTDev * dev = new ASTDev(num, parseSummand(eofSymbol, eofTokenType) );
-		return dev;
+	return condition;
+}
+ASTNode * Parser::parseFormula( Token & eofToken, ASTNode * leftPart ){
+	if(leftPart == 0){
+		leftPart = parseSummand(eofToken);
+	}
+
+	Token token;
+	_tokenizer >> token;
+	if(token == "+"){
+		return parseFormula(eofToken,new ASTPlus(leftPart, parseSummand(eofToken), token.getLineNo()));
+	}
+	else if(token == "-"){
+		return parseFormula(eofToken,new ASTMinus(leftPart, parseSummand(eofToken), token.getLineNo()));
 	}
 	else {
-		std::cout << "Syntax error";
-		std::exit(0);
+		eofToken = token;
+		return leftPart;
 	}
 
 }
 
-ASTNode * Parser::parseFormula(char eofSymbol, Token::Type * eofTokenType){
-	ASTNode * summand = parseSummand(eofSymbol, eofTokenType);
-	Token token;
-	_tokenizer >> token;
-	if(eofTokenType == 0){
-		if(token.getToken() == std::string(1,eofSymbol)){
-			return summand;
-		}
-	} else{
-		if(token.getType() == *eofTokenType){
-			_tokenizer << token;
-			return summand;
-		}
+ASTNode * Parser::parseSummand( Token & eofToken, ASTNode * leftPart){
+	if(leftPart == 0){
+		leftPart = parseFactor(eofToken);
 	}
 
-	if(token.getToken() == "+"){
-		ASTPlus * plus = new ASTPlus(summand, parseFormula(eofSymbol, eofTokenType));
-		return plus;
+	Token  token = _tokenizer.getNextTokenVal();
+	if(token == "*"){
+		_tokenizer.skipToken();
+		return parseSummand(eofToken, new ASTMult(leftPart, parseFactor(eofToken), token.getLineNo()));
+	} else if(token == "/"){
+		_tokenizer.skipToken();
+		return parseSummand(eofToken, new ASTDev(leftPart, parseFactor(eofToken), token.getLineNo()));
+	} else{
+		return leftPart;
 	}
-	else if(token.getToken() == "-"){
-		ASTMinus * minus = new ASTMinus(summand, parseFormula(eofSymbol, eofTokenType));
-		return minus;
-	}
-	else {
-		std::cout << "Syntax error";
-		std::exit(0);
+}
+
+ASTNode * Parser::parseFactor( Token & eofToken ){
+	Token token;
+	_tokenizer >> token;
+	if(token.getType() == Token::NUM){
+		return new ASTNum(stoi(token,0,10), token.getLineNo());
+	} else if(token.getType() == Token::NAME){
+		Token nextToken = _tokenizer.getNextTokenVal();
+		if(nextToken != "("){
+			return new ASTVar(token, token.getLineNo());
+		} else{
+			return parseFuncCall(token);
+		}
+	} else if(token == "("){
+		Token eofToken;
+		return parseFormula(eofToken);
+		eofToken.assertTokenType(")");
+	} else if(token == "-"){
+		return new ASTUnMinus(parseFactor(eofToken), token.getLineNo());
+	} else{
+			cerr << "line " << token.getLineNo() <<  ": syntax error" << endl;
+			exit(0);
 	}
 }
 

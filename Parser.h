@@ -10,36 +10,39 @@
 
 #include <string>
 #include <fstream>
-#include <iostream>
 #include <vector>
 #include <map>
+#include "ASTNode.h"
 #include "Function.h"
 #include "Tokenizer.h"
-#include "ASTNode.h"
-#include "Commands.h"
+using std::ifstream;
+using std::map;
+using std::string;
+using std::vector;
 
 class Parser {
 public:
-	Parser(std::ifstream & inf, std::map<std::string, Function> * funcNameSpace);
+	Parser(ifstream & inf);
 
-	command * getCommand(unsigned int pos){
-		return _mainScope[pos];
-	}
-
-	int getSize(){
-		return _mainScope.size();
+	vector<ASTNode const *> parse(map<string, Function const *> & funcNameSpace){
+		vector<ASTNode const *> mainScope;
+		parseScope(true, mainScope, funcNameSpace);
+		return mainScope;
 	}
 
 	virtual ~Parser();
 private:
-	void parseScope(bool isMainScope, std::vector<command *> & scopeBody, std::map<std::string, Function> * funcNameSpace = 0);
-	void parseFuncDefinition(std::map<std::string, Function> * funcNameSpace);
-	void parseLogicScope(std::vector<command *> & scopeBodybool, bool isWhile);
-	VarDef * parseVarDef();
-	ASTNode * parseSummand(char eofSymbol = 0, Token::Type * eofTokenType = 0);
-	ASTNode * parseFormula(char eofSymbol = 0, Token::Type * eofTokenType = 0);//eof- end of formula
+	void parseScope(bool const isMainScope, vector<ASTNode const *> & scopeBody, map<string, Function const *> & funcNameSpace);
+	ASTNode * parseVarDef(string const varName);
+	ASTNode * parseIf(map<string, Function const *> & funcNamespace);
+	ASTNode * parseWhile(map<string, Function const *> & funcNamespace);
+	ASTNode * parseCondition(int & lineNo);
+	void parseFuncDef(map<string, Function const *> & funcNamespace);
+	ASTNode * parseFuncCall(string name);
+	ASTNode * parseSummand( Token & eofToken, ASTNode * leftPart = 0 );
+	ASTNode * parseFactor( Token & eofToken );
+	ASTNode * parseFormula( Token & eofToken, ASTNode * leftPart = 0  );//eof- end of formula
 	Tokenizer _tokenizer;
-	std::vector<command *> _mainScope;
 };
 
 #endif /* PARSER_H_ */

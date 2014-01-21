@@ -10,20 +10,23 @@
 #include <iostream>
 #include "Parser.h"
 #include "Function.h"
+#include "Evaluator.h"
+using std::string;
+using std::map;
+using std::ifstream;
 
+int main (int argc, char **argv){
+	ifstream inf(argv[1]);
+	map<string, int> varNamespace;
+	map<string, Function const *> funcNamespace;
+	Parser parser(inf);
 
-int main (){
-	std::ifstream inf("program");
-	std::map<std::string, int> varNamespace;
-	std::map<std::string, Function> funcNamespace;
-	Parser parser(inf, &funcNamespace);
+	vector<ASTNode const *> mainScope = parser.parse(funcNamespace);
 
-	int pos = 0;
-	while(pos < parser.getSize()){
-		bool returnFlag;
-		command * c = parser.getCommand(pos);
-		c->execute(varNamespace, funcNamespace, pos, returnFlag);
-		++pos;
+	Evaluator * evaluator = new Evaluator(varNamespace, funcNamespace);
+
+	for(unsigned int pos = 0; pos < mainScope.size(); ++pos){
+		mainScope[pos]->visit(evaluator);
 	}
 
 }

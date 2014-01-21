@@ -10,17 +10,30 @@
 
 #include <vector>
 #include <string>
-#include <map>
-class command;
+using std::vector;
+using std::string;
+
+class ASTNode;
+
 class Function {
 public:
-	Function(std::vector<std::string> parNames, std::vector <command *> body, std::map<std::string, Function> * funcNamespace);
-	int eval(std::vector<int> & parameters);
-	virtual ~Function();
+	Function(vector<string> const & parNames, vector <ASTNode const *> const & body):
+	_parNames(parNames),
+	_body(body){
+	}
+
+	vector <ASTNode const *> const & getBody() const{
+		return _body;
+	}
+
+	vector<string> const & getParNames() const{
+		return _parNames;
+	}
+
+	~Function();
 private:
-	std::map<std::string, Function> * _funcNamespace;
-	std::vector<std::string> _parNames;
-	std::vector <command *> _body;
+	vector<string> const _parNames;
+	vector <ASTNode const *> const _body;
 };
 
 #endif /* FUNCTION_H_ */
